@@ -99,11 +99,19 @@ func main() {
 	var currentVideo, nextVideo, prevVideo string
 
 	for {
+		log.Println(" ================================================== ")
+		log.Printf("         Video %d/%d\n", indexInPlaylist+1, len(videosList))
+		log.Println(" ================================================== ")
 		currentVideo = videosList[indexInPlaylist]
 		prevVideo = getPrev(videosList, indexInPlaylist)
 		nextVideo = getNext(videosList, indexInPlaylist)
 		var waitgroup sync.WaitGroup
 		log.Printf("Reading video %q\n", currentVideo)
+		if _, ok := toDelete[currentVideo]; ok {
+			fmt.Println()
+			log.Println("       [WARNING] This video has been marked to be deleted")
+			fmt.Println()
+		}
 		go playVideo(currentVideo, &waitgroup)
 
 		log.Println("Available commands: ")
