@@ -10,18 +10,29 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/eiannone/keyboard"
+)
+
+type direction int
+
+const (
+	backward direction = iota
+	forward
 )
 
 var mplayer *exec.Cmd
 var stdinMplayer io.WriteCloser
 var currentReadVideo string
 var toDelete map[string]string
+var readingDirection direction
 
 func main() {
+	readingDirection = forward
 	toDelete := make(map[string]string)
 	playlist := os.Args[1]
+	haveToFixPlaylist := false
 	videosList, err := getContent(playlist)
 	if err != nil {
 		os.Exit(1)
@@ -39,6 +50,24 @@ func main() {
 
 	for {
 		currentVideo = videosList[indexInPlaylist]
+		// Checking if file exists
+		if problemInOpeningFile(currentVideo) {
+			haveToFixPlaylist = true
+			log.Printf("[WARNING] Video %q does not exist. The playlist is not up to date.\n", currentVideo)
+			log.Println("[WARNING] The playlist will be fixed in a separated file for future use.")
+			if indexInPlaylist == len(videosList)-1 {
+				log.Println("[WARNING] You have reached the end of the playlist. Stopping reading.")
+				goto endReading
+			}
+			// have to follow the way the user was reading: forward of backward
+			if readingDirection == forward {
+				indexInPlaylist++
+			} else {
+				indexInPlaylist--
+			}
+			continue
+		}
+
 		prevVideo = getPrev(videosList, indexInPlaylist)
 		nextVideo = getNext(videosList, indexInPlaylist)
 		log.Println(" ================================================== ")
@@ -79,9 +108,11 @@ func main() {
 					log.Printf("Switching to next file %s\n", nextVideo)
 					stopPlayVideo()
 					indexInPlaylist++
+					readingDirection = forward
 					goto playNextVideo
 				}
 			case "<":
+				readingDirection = backward
 				if indexInPlaylist > 0 {
 					log.Printf("Switching to previous file %s\n", prevVideo)
 					indexInPlaylist--
@@ -121,6 +152,14 @@ endReading:
 		}
 		deleteSelection(toDelete)
 	}
+
+	if haveToFixPlaylist || len(toDelete) > 0 {
+		pathNewPlaylist, err := fixPlaylist(playlist)
+		if err != nil {
+			os.Exit(1)
+		}
+		log.Printf("Fixed playlist is stored at %q\n", pathNewPlaylist)
+	}
 }
 
 func getContent(fileContainingList string) ([]string, error) {
@@ -136,6 +175,14 @@ func getContent(fileContainingList string) ([]string, error) {
 	}
 	videosListAsString := string(videosListAsBytes)
 	return strings.Split(videosListAsString, "\n"), nil
+}
+
+func problemInOpeningFile(path string) bool {
+	_, err := os.Open(path)
+	if err != nil {
+		return true
+	}
+	return false
 }
 
 func getPrev(list []string, currentIndex int) string {
@@ -219,8 +266,40 @@ func confirm() bool {
 
 func deleteSelection(selection map[string]string) {
 	i := 0
+	var err error
 	for _, path := range selection {
-		log.Printf("(%d/%d) Deleting %q ...\n", i+1, len(selection), path)
+		err = os.Remove(path)
+		if err != nil {
+			log.Printf("[Warning] Failed to delete %q due to %v\n", path, err)
+			continue
+		}
+		log.Printf("(%d/%d) Deleted %q ...\n", i+1, len(selection), path)
 		i++
 	}
+}
+
+func fixPlaylist(pathToPlaylist string) (string, error) {
+	content, err := getContent(pathToPlaylist)
+	if err != nil {
+		log.Printf("[ERROR] failed to fix playlist %q due to %v\n", pathToPlaylist, err)
+		return "", err
+	}
+	lines := ""
+	for _, path := range content {
+		if problemInOpeningFile(path) {
+			continue
+		}
+		if lines != "" {
+			lines += "\n"
+		}
+		lines += path
+	}
+	t := time.Now()
+	outputFile := pathToPlaylist + "-" + fmt.Sprintf(t.Format("20060102150405"))
+	err = ioutil.WriteFile(outputFile, []byte(lines), 0644)
+	if err != nil {
+		log.Printf("[ERROR] failed to write fixed playlist to %q due to %v\n", outputFile, err)
+		return "", err
+	}
+	return outputFile, nil
 }
