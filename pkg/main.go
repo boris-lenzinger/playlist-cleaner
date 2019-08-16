@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -32,10 +33,30 @@ func main() {
 	readingDirection = forward
 	toDelete := make(map[string]string)
 	playlist := os.Args[1]
+	startFrom := 1
+
+	if len(os.Args) > 2 {
+		if os.Args[2] != "--start-from" {
+			log.Fatal("Invalid option. The only supported option is --start-from")
+		}
+		if len(os.Args) < 4 {
+			log.Fatal("Please supply a number from which the reading must start from")
+		}
+		var err error
+		startFrom, err = strconv.Atoi(os.Args[3])
+		if err != nil {
+			log.Fatalf("The value after --start-from must be an integer. Received: %q\n", os.Args[3])
+		}
+	}
+
 	haveToFixPlaylist := false
 	videosList, err := getContent(playlist)
 	if err != nil {
 		os.Exit(1)
+	}
+
+	if startFrom > len(videosList) {
+		log.Fatalf("The playlist contains %d elements but you required to start at element %d. Please change the starting element\n", len(videosList), startFrom)
 	}
 
 	err = keyboard.Open()
@@ -44,7 +65,7 @@ func main() {
 	}
 	defer keyboard.Close()
 
-	indexInPlaylist := 0
+	indexInPlaylist := startFrom - 1
 	var currentVideo, nextVideo, prevVideo string
 	var waitgroup sync.WaitGroup
 

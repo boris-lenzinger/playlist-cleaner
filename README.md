@@ -8,5 +8,6 @@ to be deleted (hit d in the console).
 At the end, the program show a summary of what will be deleted and the total size
 of the deletion.
 
-This is not yet over since the deletion is not yet coded but it will be done
-soon.
+In case you handle some long playlist, it might be interesting to stop and restart
+the work from a given point. The option --from lineNumber make is possible.
+
